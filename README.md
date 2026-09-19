@@ -1,565 +1,383 @@
 ET3 Delivery Planner
 
-A simple and maintainable ASP.NET Core Web API for planning delivery trips based on delivery priority, destination area, and vehicle capacity.
+A simple and deterministic delivery trip planner built with ASP.NET Core Web API and Entity Framework Core.
 
-The main goal of the solution is to organize deliveries into trips while ensuring that no trip exceeds the maximum vehicle capacity of 10 kg.
+The system organizes deliveries into vehicle trips while respecting the vehicle's maximum capacity, delivery priority, and area grouping requirements.
 
-The solution uses a greedy approach with clearly defined preferences for selecting an existing trip.
+The solution focuses on being simple, readable, explainable, and easy to maintain, as required by the technical challenge.
 
 ---
 
-1. Problem Overview
+📌 Project Overview
+
+The application receives a list of deliveries and organizes them into trips.
 
 Each delivery contains:
 
-- "Id"
-- "Area"
-- "Priority"
-- "PackageWeight"
+- Area — destination area
+- Priority — lower numbers represent higher urgency
+- Package Weight — package weight in kilograms
+- ID — generated automatically by the database
 
 The vehicle has a maximum capacity of:
 
-10 kg per trip
+«10 kg per trip»
 
-The planner should:
-
-- Process more urgent deliveries first.
-- Prefer grouping deliveries according to priority and area.
-- Never exceed the 10 kg trip capacity.
-- Assign every valid delivery exactly once.
-- Create a new trip when no existing trip can accommodate the delivery.
+The planner must ensure that no trip exceeds this limit.
 
 ---
 
-2. Main Business Rules
+🎯 Challenge Requirements
 
-The solution follows these rules:
+The solution follows the main requirements of the challenge:
 
-Vehicle Capacity
+- A trip must never exceed 10 kg.
+- Lower priority numbers are processed first.
+- Deliveries going to the same area should be grouped together where reasonably possible.
+- Every valid delivery should appear exactly once in the generated trips.
+- Deliveries that cannot be included because of invalid weight are not planned.
+- The algorithm should behave consistently and be easy to explain.
+- The solution should handle important edge cases.
+- The project should remain simple rather than using unnecessary complex algorithms or frameworks.
 
-A trip must never exceed:
+---
 
-10 kg
+🛠 Technologies
 
-A delivery with a weight greater than 10 kg cannot be assigned to a trip.
+- C#
+- ASP.NET Core Web API
+- Entity Framework Core
+- SQL Server
+- Swagger / OpenAPI
+- REST APIs
+- Repository Pattern
+- Service Layer
+- Custom Exception Middleware
 
-Priority
+---
 
-Lower priority numbers represent more urgent deliveries.
+🧠 Trip Planning Approach
 
-Therefore, deliveries are processed in ascending priority order:
+The planner uses a Greedy Algorithm.
 
-Priority 1
-Priority 2
-Priority 3
-...
+Instead of trying every possible combination of deliveries, the algorithm processes deliveries one by one and chooses the best currently available trip according to a fixed set of rules.
 
-The delivery "Id" is used as a secondary ordering criterion to make the processing order deterministic.
+This makes the solution:
 
-Area
+- Simple
+- Deterministic
+- Easy to understand
+- Easy to test
+- Efficient enough for the scope of the challenge
 
-Deliveries going to the same area are preferred to be grouped together where possible.
+The algorithm does not guarantee the mathematically minimum possible number of trips. It is a practical heuristic that balances capacity, priority, and area grouping.
 
-Trip Selection
+---
 
-When processing a delivery, the planner searches for a suitable trip using the following order of preference:
+🚚 Trip Selection Strategy
 
-1. Same Priority + Same Area + Enough Capacity
-2. Same Priority + Enough Capacity
-3. Same Area + Enough Capacity
-4. Any Trip + Enough Capacity
+For every delivery, the planner checks the existing trips in the following order:
+
+1. Same Priority + Same Area
+
+First, try to place the delivery into a trip that:
+
+- Has enough remaining capacity
+- Contains deliveries with the same priority
+- Contains deliveries going to the same area
+
+This gives the strongest grouping.
+
+---
+
+2. Same Priority
+
+If no suitable trip is found, look for a trip that:
+
+- Has enough capacity
+- Already contains a delivery with the same priority
+
+---
+
+3. Same Area
+
+If there is still no suitable trip, look for a trip that:
+
+- Has enough capacity
+- Already contains a delivery going to the same area
+
+This keeps deliveries to the same destination together where possible.
+
+---
+
+4. Any Trip With Enough Capacity
+
+If none of the previous conditions can be satisfied, the delivery can be placed in any existing trip that has enough remaining capacity.
+
+This prevents unnecessary trips when capacity is available.
+
+---
+
 5. Create a New Trip
 
-This ordering is a deliberate design decision used to balance priority, area grouping, and capacity utilization.
+If no existing trip can hold the delivery, a new trip is created.
+
+The new trip starts with the current delivery.
 
 ---
 
-3. Algorithm
+📊 Choosing Between Multiple Suitable Trips
 
-The application uses a greedy algorithm.
-
-For each delivery, the planner makes the best available decision based on the current trips instead of trying every possible combination.
-
-High-Level Flow
-
-Get all deliveries
-        ↓
-Filter invalid deliveries
-        ↓
-Sort by Priority
-        ↓
-Process deliveries one by one
-        ↓
-Same Priority + Same Area?
-        ↓
-       Yes → Use Trip
-        ↓ No
-Same Priority?
-        ↓
-       Yes → Use Trip
-        ↓ No
-Same Area?
-        ↓
-       Yes → Use Trip
-        ↓ No
-Any Trip with enough capacity?
-        ↓
-       Yes → Use Trip
-        ↓ No
-Create New Trip
-
----
-
-4. Detailed Trip Selection Strategy
-
-For every delivery, the planner checks the following conditions in order.
-
-4.1 Same Priority + Same Area
-
-This is the first preference.
-
-The planner looks for an existing trip that:
-
-- Has enough remaining capacity.
-- Contains a delivery with the same priority.
-- Contains a delivery from the same area.
-
-Example:
-
-Existing Trip:
-Area = Maadi
-Priority = 1
-Weight = 6 kg
-
-New Delivery:
-Area = Maadi
-Priority = 1
-Weight = 3 kg
-
-Since:
-
-6 + 3 = 9 kg
-
-the delivery is added to the existing trip.
-
----
-
-4.2 Same Priority
-
-If no trip satisfies both priority and area, the planner looks for a trip containing a delivery with the same priority and enough capacity.
-
-Example:
-
-Trip 1:
-Priority = 1
-Weight = 6 kg
-
-New Delivery:
-Priority = 1
-Weight = 3 kg
-
-The delivery can be added:
-
-6 + 3 = 9 kg
-
----
-
-4.3 Same Area
-
-If no same-priority trip is available, the planner looks for a trip serving the same area with enough capacity.
-
-Example:
-
-Trip 1:
-Area = Maadi
-Weight = 5 kg
-
-New Delivery:
-Area = Maadi
-Weight = 4 kg
-Priority = 3
-
-Even if the priorities are different, the delivery can be grouped with the same area:
-
-5 + 4 = 9 kg
-
----
-
-4.4 Any Trip With Enough Capacity
-
-If there is no suitable trip matching priority or area, the planner reuses any existing trip that can accommodate the delivery.
-
-This avoids creating a new trip unnecessarily when available capacity already exists.
-
----
-
-4.5 Create a New Trip
-
-If no existing trip can accommodate the delivery, a new trip is created.
-
-Example:
-
-Existing Trip:
-Weight = 8 kg
-
-New Delivery:
-Weight = 4 kg
-
-Since:
-
-8 + 4 = 12 kg
-
-the delivery cannot be added to that trip.
-
-If no other trip can accommodate it, a new trip is created.
-
----
-
-5. Choosing Between Multiple Suitable Trips
-
-If more than one trip satisfies the current rule, the planner selects the trip with the highest current total weight.
+If more than one trip satisfies the current rule, the planner chooses the trip with the highest current total weight.
 
 For example:
 
-Trip 1 = 5 kg
-Trip 2 = 7 kg
-New Delivery = 2 kg
+Trip 1 → 4 kg
+Trip 2 → 7 kg
+New delivery → 2 kg
 
-Both trips can accommodate the delivery.
+Both trips have enough capacity.
 
 The planner chooses:
 
-Trip 2
+Trip 2 → 7 + 2 = 9 kg
 
-7 + 2 = 9 kg
+instead of:
 
-This helps use existing capacity more efficiently and reduces fragmented unused space.
+Trip 1 → 4 + 2 = 6 kg
+
+This helps use existing capacity efficiently and reduces fragmented unused space.
 
 ---
 
-6. Example
+🔢 Delivery Processing Order
 
-Input
+Before creating trips, valid deliveries are ordered by:
 
-[
-  {
-    "id": 1,
-    "area": "Maadi",
-    "priority": 1,
-    "packageWeight": 2
-  },
-  {
-    "id": 2,
-    "area": "Maadi",
-    "priority": 1,
-    "packageWeight": 4
-  },
-  {
-    "id": 3,
-    "area": "Maadi",
-    "priority": 2,
-    "packageWeight": 3
-  },
-  {
-    "id": 4,
-    "area": "Zamalek",
-    "priority": 1,
-    "packageWeight": 7
-  }
-]
+1. Priority — lower number first
+2. Area — deterministic tie-breaking
+3. ID — deterministic ordering when needed
 
-Processing Order
+Example:
 
-The deliveries are processed according to priority:
+Priority 1
+    ↓
+Priority 2
+    ↓
+Priority 3
 
-ID 1 → Priority 1
-ID 2 → Priority 1
-ID 4 → Priority 1
-ID 3 → Priority 2
+This ensures that more urgent deliveries are considered before less urgent ones.
 
-Processing
+---
 
-Delivery 1
+🧮 Example
 
-No trips exist.
+Suppose we have:
 
-Trip 1 = 2 kg
+ID| Area| Priority| Weight
+1| Maadi| 1| 2 kg
+2| Maadi| 1| 4 kg
+3| Maadi| 2| 3 kg
+4| Zamalek| 1| 7 kg
 
-Delivery 2
+The planner processes deliveries according to priority and deterministic tie-breaking.
 
-Same priority + same area exists.
-
-Trip 1 = 2 + 4 = 6 kg
-
-Delivery 4
-
-No suitable Maadi/Priority 1 trip has enough capacity:
-
-6 + 7 = 13 kg
-
-A new trip is created.
-
-Trip 2 = 7 kg
-
-Delivery 3
-
-Trip 1 has:
-
-Area = Maadi
-Priority = 1
-Weight = 6 kg
-
-The delivery has:
-
-Area = Maadi
-Priority = 2
-Weight = 3 kg
-
-The first two conditions do not match because the priority is different.
-
-The third condition matches:
-
-Same Area + Enough Capacity
-
-Therefore:
-
-Trip 1 = 6 + 3 = 9 kg
-
-Final Result
+Possible result:
 
 Trip 1
 ---------
-ID 1 → 2 kg
-ID 2 → 4 kg
-ID 3 → 3 kg
+Maadi - Priority 1 - 2 kg
+Maadi - Priority 1 - 4 kg
+Total = 6 kg
 
-Total = 9 kg
-
+Then:
 
 Trip 2
 ---------
-ID 4 → 7 kg
+Maadi - Priority 2 - 3 kg
+Total = 3 kg
 
+And:
+
+Trip 3
+---------
+Zamalek - Priority 1 - 7 kg
 Total = 7 kg
 
-Every valid delivery is assigned exactly once, and no trip exceeds 10 kg.
+Every trip remains within the 10 kg limit.
 
 ---
 
-7. Validation and Edge Cases
+⚠️ Edge Cases
 
-The planner handles the following cases.
+The application handles the following cases:
 
-Empty Delivery List
+Empty Input
 
-Input:
+If there are no deliveries:
 
-[]
+Trips = 0
 
-Result:
-
-[]
-
-No trip is created.
+No unnecessary trip is created.
 
 ---
 
 Package Weight Greater Than 10 kg
 
-Example:
+A package heavier than the vehicle capacity cannot be delivered in a single trip.
 
-{
-  "id": 5,
-  "area": "Nasr City",
-  "priority": 1,
-  "packageWeight": 12
-}
+For example:
 
-This delivery cannot be transported by a vehicle with a 10 kg maximum capacity.
+Package = 12 kg
+Vehicle Capacity = 10 kg
 
-It is excluded from trip planning.
+The delivery is considered invalid and is not included in trip planning.
+
+When adding deliveries through the API, the request is rejected with a 400 Bad Request.
 
 ---
 
 Zero or Negative Weight
 
-Examples:
+Weights such as:
 
 0 kg
 -2 kg
 
-These values are considered invalid and are excluded from planning.
+are invalid and rejected by the API.
+
+---
+
+Package Does Not Fit in Current Trip
+
+Example:
+
+Current Trip = 8 kg
+New Delivery = 4 kg
+Capacity = 10 kg
+
+Because:
+
+8 + 4 = 12 kg
+
+the delivery cannot be added to that trip.
+
+The planner continues searching for another suitable trip.
+
+If none exists, it creates a new trip.
 
 ---
 
 Multiple Deliveries With the Same Priority
 
-When multiple deliveries have the same priority, the "Id" is used as a secondary sorting criterion.
-
-This provides deterministic processing.
+When several deliveries have the same priority, the planner continues using the area and capacity rules to determine where they should be placed.
 
 ---
 
-Delivery Does Not Fit
+💡 Why Greedy?
 
-If:
+A greedy approach was selected because the challenge does not require a mathematically optimal packing algorithm.
 
-Current Trip = 8 kg
-New Delivery = 3 kg
+The algorithm makes a reasonable local decision for each delivery while respecting the important business rules.
 
-then:
+It also has several practical advantages:
 
-8 + 3 = 11 kg
+- Easy to understand
+- Easy to explain during an interview
+- Predictable behavior
+- No unnecessary complexity
+- Good performance compared with trying every possible combination
 
-The delivery cannot be added to that trip.
+However, it is important to note that:
 
-The planner continues searching for another suitable trip.
+«The algorithm does not guarantee the minimum possible number of trips.»
 
-If no suitable trip exists, a new trip is created.
+For example, a different ordering or packing strategy could sometimes produce fewer trips.
 
----
-
-8. Why Greedy?
-
-The problem can be viewed as a constrained packing problem because deliveries need to be placed into trips with a maximum capacity.
-
-A fully optimized solution could try to find a globally optimal distribution of deliveries.
-
-However, the challenge also contains other requirements:
-
-- Priority order.
-- Same-area grouping.
-- Capacity constraints.
-- Reasonable and explainable decisions.
-
-Therefore, a greedy strategy was selected.
-
-The algorithm makes a decision for each delivery based on the best currently available option.
-
-Advantages
-
-- Simple to understand.
-- Easy to trace and debug.
-- Deterministic.
-- Respects the 10 kg capacity constraint.
-- Considers priority.
-- Attempts to group deliveries intelligently.
-- Easy to extend.
-
-Limitation
-
-The greedy approach does not guarantee the globally minimum number of trips.
-
-An earlier decision can sometimes leave unused capacity that cannot be efficiently used by later deliveries.
-
-Finding the globally optimal arrangement would require a more complex optimization strategy.
-
-For this challenge, the greedy approach provides a reasonable balance between correctness, simplicity, and explainability.
+The challenge allows reasonable decisions as long as the behavior is consistent and the decision is clearly explained.
 
 ---
 
-9. Complexity and Scalability
+📈 Scalability
 
-The current implementation keeps the deliveries and generated trips in memory.
+For "N" deliveries and "T" trips, the current approach may inspect existing trips for each delivery.
 
-For each delivery, the planner may scan the existing trips multiple times.
+In the worst case, the planning process can approach:
 
-Therefore, as the number of deliveries and trips grows, the number of comparisons can also grow.
+O(N × T)
 
-For a very large dataset such as 1 million deliveries, the current implementation would need optimization.
+Since the number of trips can grow with the number of deliveries, the approach can become expensive for very large datasets.
 
-Possible improvements include:
+For a dataset containing 1 million deliveries, I would consider:
 
-- Processing deliveries in batches.
-- Avoiding loading the entire dataset into memory.
-- Maintaining trips grouped by area.
-- Using more efficient lookup structures.
-- Reducing repeated scans of the trip list.
-- Moving filtering and sorting operations to the database when appropriate.
-- Using a more advanced packing/optimization strategy if minimizing the number of trips becomes a strict requirement.
+- Processing data in batches
+- Reducing repeated searches through trips
+- Using dictionaries/grouping structures for areas and priorities
+- Avoiding unnecessary database calls
+- Separating data loading from trip calculation
+- Profiling the actual bottlenecks before optimizing
 
-The current implementation intentionally prioritizes clarity and maintainability.
-
----
-
-10. Architecture
-
-The application uses a simple layered structure.
-
-Controller
-    ↓
-Service
-    ↓
-Repository
-    ↓
-Entity Framework Core
-    ↓
-SQL Server
-
-Controller
-
-Responsible for handling HTTP requests and returning HTTP responses.
-
-Service
-
-Contains the business logic, including the trip planning algorithm.
-
-Repository
-
-Responsible for accessing delivery data.
-
-Infrastructure
-
-Contains the EF Core "DbContext", database configuration, and repository implementations.
-
-This separation keeps the trip planning logic independent from the API and database access code.
+The current implementation intentionally favors clarity because the challenge emphasizes understandable and explainable code.
 
 ---
 
-11. Error Handling
+🏗️ Project Structure
 
-The API uses global exception handling middleware.
+The project uses a simple layered structure:
 
-Custom exceptions include:
+ET3DeliveryPlanner
+│
+├── ET3DeliveryPlanner.Data
+│   ├── Entities
+│   ├── Repositories
+│   ├── Services
+│   └── MappingProfiles
+│
+├── ET3DeliveryPlanner.Infrastructure
+│   ├── Data
+│   └── Repositories
+│
+├── ET3DeliveryPlanner.Services
+│   ├── Services
+│   └── Exceptions
+│
+└── ET3DeliveryPlannerApi
+    ├── Controllers
+    ├── Errors
+    └── MiddleWares
 
-BadRequestException
-NotFoundException
-ConflictException
+The goal is to keep responsibilities separated without introducing unnecessary complexity.
 
-The middleware converts these exceptions into consistent HTTP responses.
+---
 
-Example:
+🗄️ Database
+
+The application uses SQL Server with Entity Framework Core.
+
+The "Delivery" table contains:
+
+Id
+Area
+Priority
+PackageWeight
+
+The "Id" is generated automatically by the database.
+
+Example request:
 
 {
-  "statusCode": 404,
-  "message": "Delivery with ID 10 was not found."
+  "area": "Maadi",
+  "priority": 1,
+  "packageWeight": 4
 }
 
-This avoids repeating "try/catch" blocks across controllers.
+The database generates the ID automatically.
+
+The database also validates the package weight so that invalid values cannot be stored.
 
 ---
 
-12. Database
-
-The application uses:
-
-- SQL Server
-- Entity Framework Core
-- EF Core Migrations
-
-The "Delivery" entity is configured using "IEntityTypeConfiguration<Delivery>".
-
-Important constraints include:
-
-Area → Required
-Priority → Required
-PackageWeight → Required
-PackageWeight → Greater than 0
-PackageWeight → Less than or equal to 10
-
----
-
-13. API Endpoints
+🔌 API Endpoints
 
 Deliveries
 
@@ -571,17 +389,16 @@ Get delivery by ID
 
 GET /api/Deliveries/{id}
 
-Add delivery
+Add a delivery
 
 POST /api/Deliveries
 
 Example:
 
 {
-  "id": 1,
   "area": "Maadi",
   "priority": 1,
-  "packageWeight": 4.5
+  "packageWeight": 4
 }
 
 ---
@@ -592,57 +409,144 @@ Generate delivery trips
 
 GET /api/Trips
 
-This endpoint runs the trip planning algorithm and returns the generated trips.
+Returns the generated trips based on the current deliveries.
 
 Get trip summary
 
 GET /api/Trips/summary
 
-The summary endpoint provides additional information such as:
+The summary contains information such as:
 
-- Total deliveries.
-- Valid deliveries.
-- Invalid deliveries.
-- Total trips.
-- Total weight.
-- Average deliveries per trip.
-
-The summary endpoint is an additional feature implemented beyond the core trip-planning logic.
+- Total deliveries
+- Valid deliveries
+- Invalid deliveries
+- Total trips
+- Total weight
+- Average deliveries per trip
 
 ---
 
-14. Input Data
+🛡️ Error Handling
 
-The challenge requires the solution to work with delivery input data.
+The API uses custom exceptions and centralized exception handling middleware.
 
-The project can use a JSON input file for test data, for example:
+Supported cases include:
+
+Status Code| Meaning
+400| Invalid request or invalid package weight
+404| Delivery was not found
+409| Request conflicts with the current data/state
+500| Unexpected server error
+
+Instead of writing repetitive "try/catch" blocks inside every controller, exceptions are handled centrally by the middleware.
+
+This keeps controllers cleaner and provides a consistent error response.
+
+---
+
+🔐 Data Validation
+
+Delivery weight is validated before being added.
+
+A valid delivery must satisfy:
+
+0 < PackageWeight ≤ 10
+
+Invalid values are rejected with a clear error message.
+
+The same business rule is also enforced at the database level using a check constraint.
+
+---
+
+🧪 Testing Scenarios
+
+The following scenarios can be used to verify the planner.
+
+1. Same Area
 
 [
   {
-    "id": 1,
     "area": "Maadi",
     "priority": 1,
     "packageWeight": 2
   },
   {
-    "id": 2,
-    "area": "Zamalek",
-    "priority": 2,
+    "area": "Maadi",
+    "priority": 1,
+    "packageWeight": 4
+  }
+]
+
+Expected:
+
+Same area
+Same priority
+Same trip
+Total = 6 kg
+
+---
+
+2. Capacity Limit
+
+[
+  {
+    "area": "Maadi",
+    "priority": 1,
+    "packageWeight": 6
+  },
+  {
+    "area": "Maadi",
+    "priority": 1,
     "packageWeight": 5
   }
 ]
 
-The input data can then be loaded into the application/database before generating trips.
+Expected:
+
+Trip 1 = 6 kg
+Trip 2 = 5 kg
+
+The two deliveries cannot share a trip because:
+
+6 + 5 = 11 kg > 10 kg
 
 ---
 
-15. Running the Project
+3. Different Priorities
 
-Clone the repository
+[
+  {
+    "area": "Maadi",
+    "priority": 3,
+    "packageWeight": 2
+  },
+  {
+    "area": "Zamalek",
+    "priority": 1,
+    "packageWeight": 2
+  },
+  {
+    "area": "Nasr City",
+    "priority": 2,
+    "packageWeight": 2
+  }
+]
+
+The planner processes:
+
+Priority 1
+Priority 2
+Priority 3
+
+---
+
+🚀 Running the Project
+
+1. Clone the repository
 
 git clone <repository-url>
 
-Configure the database
+2. Configure the database
 
 Update the connection string in:
 
@@ -656,75 +560,89 @@ Example:
   }
 }
 
-Apply migrations
+3. Apply migrations
 
 Using Package Manager Console:
 
+Add-Migration InitialCreate
 Update-Database
 
 Or using the .NET CLI:
 
+dotnet ef migrations add InitialCreate
 dotnet ef database update
 
-Run the application
+4. Run the API
 
 dotnet run
 
-The API can then be tested through Swagger.
+5. Open Swagger
+
+Swagger can be used to test the API endpoints and inspect the generated responses.
 
 ---
 
-16. Testing the Algorithm
+🔮 Possible Improvements
 
-The most important scenarios to test are:
-
-Scenario| Expected behavior
-Empty input| No trips
-Same priority + same area| Prefer the matching trip
-Same priority| Prefer a matching-priority trip
-Same area| Prefer a matching-area trip
-Different priority and area| Use another available trip
-Package does not fit| Try another trip
-No trip can fit| Create a new trip
-Weight > 10 kg| Ignore/reject invalid delivery
-Weight <= 0| Ignore/reject invalid delivery
-Multiple equal priorities| Process deterministically by ID
-
----
-
-17. Future Improvements
+The current implementation is intentionally simple.
 
 Possible future improvements include:
 
-- Unit tests for the trip planning rules.
-- Integration tests for API endpoints.
-- Pagination for delivery listing.
-- Batch processing for large datasets.
-- More efficient trip lookup.
-- Persistent trip storage if trips need to be saved.
-- More advanced optimization if minimum trip count becomes a strict business requirement.
-- A dedicated input-file import service.
+Better Packing
+
+Use a more advanced bin-packing strategy if minimizing the number of trips becomes the primary objective.
+
+Improved Area Grouping
+
+Create stronger area-based grouping before packing deliveries into trips.
+
+Large Dataset Optimization
+
+For very large datasets, optimize trip lookups and avoid repeatedly scanning all existing trips.
+
+File Import
+
+Add a dedicated import process for CSV/JSON input files so that large delivery datasets can be loaded directly into the system.
+
+Automated Tests
+
+Add unit tests for:
+
+- Capacity rules
+- Priority ordering
+- Area grouping
+- Invalid deliveries
+- Empty input
+- New trip creation
+- Multiple suitable trips
 
 ---
 
-18. Summary
+📌 Design Decisions
 
-The project implements a deterministic greedy delivery planner based on five levels of preference:
+A few decisions were intentionally made to keep the solution simple and explainable:
 
-Same Priority + Same Area
-            ↓
-Same Priority
-            ↓
-Same Area
-            ↓
-Any Available Trip
-            ↓
-New Trip
+- Greedy algorithm instead of complex optimization.
+- Lower priority number = higher urgency.
+- Same priority + same area is preferred first.
+- Existing trips with the highest current weight are preferred when multiple trips are suitable.
+- Invalid deliveries are not included in trip planning.
+- Delivery IDs are generated by the database.
+- Exception handling is centralized in middleware.
+- Database validation is used in addition to API validation.
 
-while always enforcing:
+These decisions make the behavior deterministic while keeping the implementation easy to understand and maintain.
 
-Trip Weight <= 10 kg
+---
 
-The solution intentionally favors clarity, predictable behavior, and explainability over a complex global optimization algorithm.
+📝 Conclusion
 
-The main business logic is contained in the trip planning service, making it straightforward to understand, test, and extend.
+ET3 Delivery Planner provides a simple solution for organizing deliveries into vehicle trips while respecting:
+
+- 10 kg maximum capacity
+- Delivery priority
+- Area grouping
+- Data validation
+- Deterministic behavior
+
+The solution intentionally avoids unnecessary complexity and focuses on producing code that is clear, testable, maintainable, and easy to explain.
