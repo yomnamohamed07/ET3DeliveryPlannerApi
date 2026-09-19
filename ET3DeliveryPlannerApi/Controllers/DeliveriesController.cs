@@ -57,15 +57,7 @@ namespace ET3DeliveryPlannerApi.Controllers
                     "Package weight cannot exceed 10 kg.");
             }
 
-            var existingDelivery =
-                await _deliveryRepository
-                    .GetByIdAsync(delivery.Id);
-
-            if (existingDelivery != null)
-            {
-                throw new ConflictException(
-                    $"Delivery with ID {delivery.Id} already exists.");
-            }
+         
 
             await _deliveryRepository.AddAsync(delivery);
 
