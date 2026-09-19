@@ -42,8 +42,7 @@ namespace ET3DeliveryPlannerApi.MiddleWares
                     BadRequestException =>
                         (int)HttpStatusCode.BadRequest,
 
-                    ConflictException =>
-                        (int)HttpStatusCode.Conflict,
+                  
 
                     _ =>
                         (int)HttpStatusCode.InternalServerError
