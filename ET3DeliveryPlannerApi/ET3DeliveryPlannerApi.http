@@ -1,0 +1,6 @@
+@ET3DeliveryPlannerApi_HostAddress = http://localhost:5178
+
+GET {{ET3DeliveryPlannerApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
